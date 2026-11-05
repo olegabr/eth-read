@@ -12,6 +12,8 @@ namespace Olegabr\EthRead;
 
 use InvalidArgumentException;
 use Olegabr\EthAbi\Abi\Ethabi;
+use Olegabr\EthAbi\Problem;
+use Throwable;
 
 /**
  * An `event` item of an ABI.
@@ -108,5 +110,157 @@ final class EventAbi
             static fn (array $argument): string => (string) ($argument['type'] ?? ''),
             $this->inputs()
         );
+    }
+
+    /**
+     * A filter for `eth_getLogs` that asks the node for this event only.
+     *
+     * `topics[0]` is the filter the node understands: it compares that word for
+     * equality and does not need the ABI. `$fromBlock`/`$toBlock` are sent as hex
+     * quantities because that is what the specification wants - the node rejects a
+     * decimal block number on some clients and silently ignores it on others.
+     *
+     * @since 0.3.0
+     *
+     * @param string   $address   Contract address.
+     * @param int      $fromBlock First block.
+     * @param int|null $toBlock   Last block, or null for the latest.
+     *
+     * @return array
+     */
+    public function filter(string $address, int $fromBlock, ?int $toBlock = null): array
+    {
+        $filter = [
+            'address' => $address,
+            'topics' => [$this->topic()],
+            'fromBlock' => '0x' . dechex(max(0, $fromBlock)),
+        ];
+
+        if (null !== $toBlock) {
+            $filter['toBlock'] = '0x' . dechex(max($fromBlock, $toBlock));
+        }
+
+        return $filter;
+    }
+
+    /**
+     * A log, decoded against this event.
+     *
+     * Two facts decide the shape of the answer, and both come from the ABI:
+     *
+     *  * **indexed arguments live in `topics`**, in declaration order, starting at
+     *    `topics[1]`; everything else is concatenated in `data`;
+     *  * **a dynamic indexed argument is hashed**, not stored: a `string`, `bytes` or
+     *    array marked `indexed` is only present as `keccak256(value)`, so its value
+     *    cannot be recovered and claiming one would be a lie. Those names are
+     *    reported in the problem while every other argument is still decoded.
+     *
+     * @since 0.3.0
+     *
+     * @param Log|array $log The log, or its raw array.
+     *
+     * @return array{args?:array<string,mixed>,problem?:Problem}
+     */
+    public function decode(Log|array $log): array
+    {
+        if (is_array($log)) {
+            $parsed = Log::fromRaw($log);
+
+            if (isset($parsed['problem'])) {
+                return $parsed;
+            }
+
+            $log = $parsed['log'];
+        }
+
+        $topics = $log->topics();
+
+        if ([] === $topics) {
+            return ['problem' => new Problem('log.no_topics', [$this->name()])];
+        }
+
+        if (strtolower($topics[0]) !== strtolower($this->topic())) {
+            return ['problem' => new Problem('log.topic_mismatch', [$this->signature(), $topics[0]])];
+        }
+
+        $ethabi = new Ethabi();
+        $args = [];
+        $hashed = [];
+        $topicIndex = 1;
+        $plainTypes = [];
+        $plainNames = [];
+
+        foreach ($this->inputs() as $input) {
+            $name = (string) ($input['name'] ?? '');
+            $type = (string) ($input['type'] ?? '');
+            $key = '' !== $name ? $name : (string) count($args);
+
+            if (true === ($input['indexed'] ?? false)) {
+                if (self::isHashedWhenIndexed($type)) {
+                    $hashed[] = $key;
+                    $args[$key] = $topics[$topicIndex] ?? null;
+                    $topicIndex++;
+
+                    continue;
+                }
+
+                $args[$key] = isset($topics[$topicIndex])
+                    ? $ethabi->decodeParameter($type, $topics[$topicIndex])
+                    : null;
+                $topicIndex++;
+
+                continue;
+            }
+
+            $plainTypes[] = $type;
+            $plainNames[] = $key;
+        }
+
+        if ([] !== $plainTypes) {
+            try {
+                $values = $ethabi->decodeParameters($plainTypes, $log->data());
+            } catch (Throwable $error) {
+                return ['problem' => new Problem('log.decode_failed', [$this->name(), $error->getMessage()])];
+            }
+
+            foreach ($plainNames as $index => $name) {
+                $args[$name] = $values[$index] ?? null;
+            }
+        }
+
+        if ([] !== $hashed) {
+            // The values are not in the log; the names are, and a caller that shows
+            // "unknown" is honest where a caller that shows a hash as a value is not.
+            return ['args' => $args, 'problem' => new Problem('log.indexed_hashed', [$hashed])];
+        }
+
+        return ['args' => $args];
+    }
+
+    /**
+     * Whether an indexed argument of this type is stored as a hash.
+     *
+     * @since 0.3.0
+     *
+     * @param string $type ABI type.
+     */
+    private static function isHashedWhenIndexed(string $type): bool
+    {
+        if (in_array($type, ['string', 'bytes'], true)) {
+            return true;
+        }
+
+        if (str_ends_with($type, ']')) {
+            return true;
+        }
+
+        if (str_starts_with($type, 'tuple') || str_starts_with($type, '(')) {
+            // A struct is hashed once any of its members is dynamic, and deciding
+            // that needs the components; a struct with a static layout would decode,
+            // so this errs on the side of "hash" and says so in the problem.
+            return true;
+        }
+
+        return false;
     }
 }

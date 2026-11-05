@@ -270,6 +270,48 @@ final class Client
     }
 
     /**
+     * `eth_getLogs`, with each entry as a {@see Log}.
+     *
+     * The filter is the caller's: `EventAbi::filter()` builds the one that asks for
+     * a single event, and blocks or numbers are hex quantities by then. The window
+     * is not policed here - a node's limit on a block range differs per provider -
+     * but a caller that asks for a million blocks gets the node's answer, not a
+     * silent truncation.
+     *
+     * @since 0.3.0
+     *
+     * @param array $filter The `eth_getLogs` filter object.
+     *
+     * @return array{logs?:array<int,Log>,problem?:Problem}
+     */
+    public function logs(array $filter): array
+    {
+        $answer = $this->request('eth_getLogs', [$filter]);
+
+        if (isset($answer['problem'])) {
+            return $answer;
+        }
+
+        if (!is_array($answer['result'])) {
+            return ['problem' => new Problem('log.invalid_result', [get_debug_type($answer['result'])])];
+        }
+
+        $logs = [];
+
+        foreach ($answer['result'] as $raw) {
+            $parsed = Log::fromRaw($raw);
+
+            if (isset($parsed['problem'])) {
+                return $parsed;
+            }
+
+            $logs[] = $parsed['log'];
+        }
+
+        return ['logs' => $logs];
+    }
+
+    /**
      * @param string $method Method name.
      * @param array  $params Parameters.
      *
