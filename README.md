@@ -73,6 +73,28 @@ the string from `revert("…")`, or `revert.panic` with the assertion code.
 `balance()` gives wei as a decimal string, `blockNumber()` and `chainId()` give
 integers, `code()` gives the raw `eth_getCode` answer.
 
+## Reading logs
+
+```php
+$event = $abi->event('Transfer')['event'];
+
+$logs = $client->logs($event->filter($contract, $fromBlock, $toBlock));
+// ['logs' => [Log, …]]
+
+foreach ($logs['logs'] as $log) {
+    $decoded = $event->decode($log);   // ['args' => ['from' => …, 'to' => …, 'value' => '1000']]
+}
+```
+
+Indexed arguments come from `topics` in declaration order, everything else from
+`data`. One refusal to know about: a **dynamic indexed** argument (`string`,
+`bytes`, an array) is stored as `keccak256(value)`, so the value is not in the log.
+The argument keeps the hash, the rest is decoded anyway, and the problem
+`log.indexed_hashed` names what is missing — a caller showing "unknown" is honest,
+a caller showing a hash as a value is not.
+
+A log of another event is refused by `topics[0]` (`log.topic_mismatch`).
+
 Refusals: `rpc.transport`, `rpc.http_status`, `rpc.invalid_json`, `rpc.error`,
 `rpc.no_result`, `rpc.body_too_large`, `abi.*`, `revert.*`,
 `contract.empty_answer`. A method outside `Client::READ_METHODS` throws before any
