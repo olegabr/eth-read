@@ -39,28 +39,45 @@ composer require olegabr/eth-read
 
 Requires PHP 8.1+ and `olegabr/eth-abi`.
 
-## Use
+## Reading a contract
 
 ```php
+use Olegabr\EthRead\Abi;
 use Olegabr\EthRead\Client;
-use Olegabr\EthRead\Response;
-use Olegabr\EthRead\Transport;
 
-$client = new Client(
-    'https://rpc.example',
-    $transport,        // your implementation, e.g. wp_remote_post
-    10,                // seconds, per round trip
-    2                  // attempts
-);
+$answer = Abi::fromJson($abi_json);        // ['abi' => Abi] or ['problem' => Problem]
+$function = $answer['abi']->function('balanceOf')['function'];   // name or signature
 
-$answer = $client->request('eth_blockNumber');
-// ['result' => '0x10'] or ['problem' => Problem(code: 'rpc.error', …)]
+$client = new Client('https://rpc.example', $transport, 10, 2);
+$read = $client->read($function, '0xContractAddress', ['0xHolder']);
+// ['value' => '1000000000000000000'] or ['problem' => Problem]
 ```
 
+One request goes out — selector, then encoded arguments — and one answer comes
+back, decoded against the ABI's outputs: a single output as a string, several as an
+array keyed by name.
+
+What the read path refuses, on purpose:
+
+- **a writing function** — `abi.not_read_only`, before any request: a node would
+  otherwise simulate a transfer on someone's behalf;
+- **an empty answer** — `contract.empty_answer`, not `0`: a dashboard prints zero in
+  large type, and "no code at that address" is not zero;
+- **an ambiguous name** — `abi.ambiguous`: `balanceOf(address)` and
+  `balanceOf(address,uint256)` can exist together, and answering "the first one" is
+  how a form sends the wrong call.
+
+A revert arrives as the reason rather than the word "reverted": `revert.reason` with
+the string from `revert("…")`, or `revert.panic` with the assertion code.
+
+`balance()` gives wei as a decimal string, `blockNumber()` and `chainId()` give
+integers, `code()` gives the raw `eth_getCode` answer.
+
 Refusals: `rpc.transport`, `rpc.http_status`, `rpc.invalid_json`, `rpc.error`,
-`rpc.no_result`, `rpc.body_too_large`. A method outside `Client::READ_METHODS`
-throws before any request is made — `eth_sendRawTransaction` is not in the list,
-so this class cannot be used to move money even by mistake.
+`rpc.no_result`, `rpc.body_too_large`, `abi.*`, `revert.*`,
+`contract.empty_answer`. A method outside `Client::READ_METHODS` throws before any
+request is made — `eth_sendRawTransaction` is not in the list, so this class cannot
+be used to move money even by mistake.
 
 ## Test
 
@@ -73,6 +90,11 @@ No test opens a socket: the transport is a class with canned answers.
 
 ## Local development
 
-`composer.json` points at `../eth-abi` with a path repository, so both packages
-are developed side by side. Once published, the path repository is replaced by a
-VCS repository.
+`composer.json` points at `../eth-abi` and `../php-keccak` with path repositories,
+so the packages are developed side by side. Once published, they are replaced by
+real repositories.
+
+> **Path repositories are root-only.** A `repositories` block inside a dependency's
+> `composer.json` is ignored by its consumers, so every project doing local
+> development against `eth-abi` must declare the `../php-keccak` path itself —
+> otherwise `kornrunner\Keccak` is simply missing at the first selector.

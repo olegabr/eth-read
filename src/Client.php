@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Olegabr\EthRead;
 
 use JsonException;
+use Olegabr\EthAbi\Abi\Ethabi;
 use Olegabr\EthAbi\Problem;
 use Throwable;
 
@@ -68,7 +69,8 @@ final class Client
         private readonly Transport $transport,
         private readonly int $timeout_seconds = 10,
         private readonly int $attempts = 2,
-        private readonly int $max_body_bytes = 4_194_304
+        private readonly int $max_body_bytes = 4_194_304,
+        private readonly ?Ethabi $ethabi = null
     ) {
         if ($this->timeout_seconds <= 0) {
             throw new \InvalidArgumentException('timeout_seconds must be positive');
@@ -127,13 +129,153 @@ final class Client
     }
 
     /**
+     * Read a `view`/`pure` function and return its first output as a value.
+     *
+     * The whole path of one read is here: encode the call (selector + arguments),
+     * make `eth_call`, decode the answer against the ABI's outputs. What comes back
+     * is a value or a {@see Problem} - never an exception, never a sentence.
+     *
+     * @since 0.2.0
+     *
+     * @param FunctionAbi $function The function, from a parsed ABI.
+     * @param string      $to       Contract address.
+     * @param array       $args     Argument values, in ABI order.
+     * @param string      $block    Block tag or number.
+     *
+     * @return array{value?:mixed,problem?:Problem} `value` is a string for a
+     *                                              single output, an array keyed by
+     *                                              name for several.
+     */
+    public function read(FunctionAbi $function, string $to, array $args = [], string $block = 'latest'): array
+    {
+        if (!$function->isReadOnly()) {
+            // A state-changing function has no business in a read call: the node
+            // would simulate it and answer as if it happened.
+            return ['problem' => new Problem('abi.not_read_only', [$function->signature()])];
+        }
+
+        $ethabi = $this->ethabi ?? new Ethabi();
+        $types = $function->inputTypes();
+
+        if (count($types) !== count($args)) {
+            return ['problem' => new Problem('abi.argument_count', [count($types), count($args)])];
+        }
+
+        try {
+            $encoded = $ethabi->encodeParameters($types, $args);
+        } catch (Throwable $error) {
+            return ['problem' => new Problem('abi.encode_failed', [$function->signature(), $error->getMessage()])];
+        }
+
+        $data = $function->selector() . substr($encoded, 2);
+        $answer = $this->request('eth_call', [['to' => $to, 'data' => $data], $block]);
+
+        if (isset($answer['problem'])) {
+            return $answer;
+        }
+
+        $result = $answer['result'];
+
+        if (!is_string($result) || '' === $result || '0x' === $result) {
+            // An empty answer is not "zero": the contract has no code, or the node
+            // has no state at that block. Saying `0` would be a lie a dashboard
+            // prints in large type.
+            return ['problem' => new Problem('contract.empty_answer', [$to, $function->signature()])];
+        }
+
+        $outputs = $function->outputTypes();
+
+        if ([] === $outputs) {
+            return ['value' => ''];
+        }
+
+        try {
+            $decoded = $ethabi->decodeParameters($outputs, $result);
+        } catch (Throwable $error) {
+            return ['problem' => new Problem('abi.decode_failed', [$function->signature(), $error->getMessage()])];
+        }
+
+        return ['value' => $this->name_outputs($function, $decoded)];
+    }
+
+    /**
+     * `eth_getCode`: whether the address is a contract at all.
+     *
+     * @since 0.2.0
+     *
+     * @param string $address Address.
+     *
+     * @return array{result?:string,problem?:Problem}
+     */
+    public function code(string $address): array
+    {
+        return $this->request('eth_getCode', [$address, 'latest']);
+    }
+
+    /**
+     * `eth_getBalance`, in wei, as a decimal string.
+     *
+     * @since 0.2.0
+     *
+     * @param string $address Address.
+     * @param string $block   Block tag or number.
+     *
+     * @return array{value?:string,problem?:Problem}
+     */
+    public function balance(string $address, string $block = 'latest'): array
+    {
+        $answer = $this->request('eth_getBalance', [$address, $block]);
+
+        if (!isset($answer['result']) || !is_string($answer['result'])) {
+            return $answer;
+        }
+
+        return ['value' => (string) \Olegabr\EthAbi\Support\Uint::fromHex($answer['result'])];
+    }
+
+    /**
+     * `eth_blockNumber`, as an integer.
+     *
+     * @since 0.2.0
+     *
+     * @return array{value?:int,problem?:Problem}
+     */
+    public function blockNumber(): array
+    {
+        $answer = $this->request('eth_blockNumber', []);
+
+        if (!isset($answer['result']) || !is_string($answer['result'])) {
+            return $answer;
+        }
+
+        return ['value' => (int) hexdec(substr((string) $answer['result'], 2))];
+    }
+
+    /**
+     * `eth_chainId`, as an integer.
+     *
+     * @since 0.2.0
+     *
+     * @return array{value?:int,problem?:Problem}
+     */
+    public function chainId(): array
+    {
+        $answer = $this->request('eth_chainId', []);
+
+        if (!isset($answer['result']) || !is_string($answer['result'])) {
+            return $answer;
+        }
+
+        return ['value' => (int) hexdec(substr((string) $answer['result'], 2))];
+    }
+
+    /**
      * @param string $method Method name.
      * @param array  $params Parameters.
      *
      * @return string JSON body.
      */
-    private function payload(string $method, array $params): string
-    {
+    private function payload(string $method, array $params): string    {
         try {
             return (string) json_encode(
                 [
@@ -173,8 +315,18 @@ final class Client
             $code = is_array($decoded['error']) ? ($decoded['error']['code'] ?? 0) : 0;
             $message = is_array($decoded['error']) ? (string) ($decoded['error']['message'] ?? '') : '';
 
-            // `execution reverted` carries no reason here; the reason is in
-            // `data`, decoded by the ABI layer, not by the transport.
+            // `execution reverted` carries no reason in the message; the reason is
+            // in `data`, and a visitor deserves it instead of the word "reverted".
+            $data = is_array($decoded['error']) ? ($decoded['error']['data'] ?? null) : null;
+
+            if (is_string($data) && str_starts_with($data, '0x') && strlen($data) > 2) {
+                $revert = Revert::decode($data);
+
+                if (null !== $revert) {
+                    return ['problem' => $revert];
+                }
+            }
+
             return ['problem' => new Problem('rpc.error', [(int) $code, $message, $method])];
         }
 
@@ -205,5 +357,40 @@ final class Client
             // usleep does not throw; this keeps the signature honest for static
             // analysers that do not know that.
         }
+    }
+
+    /**
+     * Decoded outputs, named when the ABI names them.
+     *
+     * One unnamed output is the common case (`totalSupply()`), and a caller wants
+     * the value, not `[0 => value]`; several outputs become name-keyed when the ABI
+     * provides names, so a view can print them without counting positions.
+     *
+     * @param FunctionAbi $function Function.
+     * @param mixed       $decoded  Decoder answer.
+     *
+     * @return mixed
+     */
+    private function name_outputs(FunctionAbi $function, mixed $decoded): mixed
+    {
+        if (!is_array($decoded)) {
+            return $decoded;
+        }
+
+        $outputs = $function->outputs();
+
+        if (1 === count($outputs)) {
+            return $decoded[0] ?? null;
+        }
+
+        $named = [];
+
+        foreach ($outputs as $index => $output) {
+            $name = (string) ($output['name'] ?? '');
+
+            $named['' !== $name ? $name : (string) $index] = $decoded[$index] ?? null;
+        }
+
+        return $named;
     }
 }
