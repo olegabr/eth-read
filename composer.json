@@ -1,0 +1,42 @@
+{
+    "name": "olegabr/eth-read",
+    "description": "Reading an EVM chain over JSON-RPC: a pluggable transport, a bounded set of read methods, and refusals as codes. No keys, no signing, no sending.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["ethereum", "evm", "json-rpc", "eth_call", "read-only"],
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../eth-abi",
+            "options": {
+                "symlink": true,
+                "versions": {
+                    "olegabr/eth-abi": "0.1.0"
+                }
+            }
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "olegabr/eth-abi": "^0.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Olegabr\\EthRead\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Olegabr\\EthRead\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
+}
