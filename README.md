@@ -42,8 +42,8 @@ Requires PHP 8.1+ and `olegabr/eth-abi`.
 ## Reading a contract
 
 ```php
-use Olegabr\EthRead\Abi;
-use Olegabr\EthRead\Client;
+use Ethereumico\EthRead\Abi;
+use Ethereumico\EthRead\Client;
 
 $answer = Abi::fromJson($abi_json);        // ['abi' => Abi] or ['problem' => Problem]
 $function = $answer['abi']->function('balanceOf')['function'];   // name or signature

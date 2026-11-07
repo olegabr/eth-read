@@ -8,11 +8,11 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead;
+namespace Ethereumico\EthRead;
 
 use InvalidArgumentException;
-use Olegabr\EthAbi\Abi\Ethabi;
-use Olegabr\EthAbi\Problem;
+use Ethereumico\EthAbi\Abi\Ethabi;
+use Ethereumico\EthAbi\Problem;
 use Throwable;
 
 /**

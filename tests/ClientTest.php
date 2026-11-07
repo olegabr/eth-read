@@ -8,15 +8,15 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead\Tests;
+namespace Ethereumico\EthRead\Tests;
 
 use InvalidArgumentException;
-use Olegabr\EthAbi\Problem;
-use Olegabr\EthAbi\Type;
-use Olegabr\EthRead\Client;
-use Olegabr\EthRead\Response;
-use Olegabr\EthRead\Transport;
-use Olegabr\EthRead\TransportError;
+use Ethereumico\EthAbi\Problem;
+use Ethereumico\EthAbi\Type;
+use Ethereumico\EthRead\Client;
+use Ethereumico\EthRead\Response;
+use Ethereumico\EthRead\Transport;
+use Ethereumico\EthRead\TransportError;
 use PHPUnit\Framework\TestCase;
 
 final class ClientTest extends TestCase

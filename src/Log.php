@@ -8,9 +8,9 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead;
+namespace Ethereumico\EthRead;
 
-use Olegabr\EthAbi\Problem;
+use Ethereumico\EthAbi\Problem;
 
 /**
  * A log entry from `eth_getLogs`, with the fields a reader needs and no guessing.

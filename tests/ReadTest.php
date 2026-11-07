@@ -8,14 +8,14 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead\Tests;
+namespace Ethereumico\EthRead\Tests;
 
-use Olegabr\EthAbi\Abi\Ethabi;
-use Olegabr\EthAbi\Problem;
-use Olegabr\EthRead\Abi;
-use Olegabr\EthRead\Client;
-use Olegabr\EthRead\Response;
-use Olegabr\EthRead\Transport;
+use Ethereumico\EthAbi\Abi\Ethabi;
+use Ethereumico\EthAbi\Problem;
+use Ethereumico\EthRead\Abi;
+use Ethereumico\EthRead\Client;
+use Ethereumico\EthRead\Response;
+use Ethereumico\EthRead\Transport;
 use PHPUnit\Framework\TestCase;
 
 final class ReadTest extends TestCase

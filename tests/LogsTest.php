@@ -8,14 +8,14 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead\Tests;
+namespace Ethereumico\EthRead\Tests;
 
-use Olegabr\EthAbi\Abi\Ethabi;
-use Olegabr\EthRead\Abi;
-use Olegabr\EthRead\Client;
-use Olegabr\EthRead\Log;
-use Olegabr\EthRead\Response;
-use Olegabr\EthRead\Transport;
+use Ethereumico\EthAbi\Abi\Ethabi;
+use Ethereumico\EthRead\Abi;
+use Ethereumico\EthRead\Client;
+use Ethereumico\EthRead\Log;
+use Ethereumico\EthRead\Response;
+use Ethereumico\EthRead\Transport;
 use PHPUnit\Framework\TestCase;
 
 final class LogsTest extends TestCase
@@ -33,7 +33,7 @@ final class LogsTest extends TestCase
 ]
 JSON;
 
-    private function event(string $name): \Olegabr\EthRead\EventAbi
+    private function event(string $name): \Ethereumico\EthRead\EventAbi
     {
         $abi = Abi::fromJson(self::ABI)['abi'];
 

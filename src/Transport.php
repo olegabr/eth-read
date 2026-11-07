@@ -8,7 +8,7 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead;
+namespace Ethereumico\EthRead;
 
 /**
  * An HTTP POST, supplied by the caller.

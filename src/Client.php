@@ -8,11 +8,11 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead;
+namespace Ethereumico\EthRead;
 
 use JsonException;
-use Olegabr\EthAbi\Abi\Ethabi;
-use Olegabr\EthAbi\Problem;
+use Ethereumico\EthAbi\Abi\Ethabi;
+use Ethereumico\EthAbi\Problem;
 use Throwable;
 
 /**
@@ -230,7 +230,7 @@ final class Client
             return $answer;
         }
 
-        return ['value' => (string) \Olegabr\EthAbi\Support\Uint::fromHex($answer['result'])];
+        return ['value' => (string) \Ethereumico\EthAbi\Support\Uint::fromHex($answer['result'])];
     }
 
     /**

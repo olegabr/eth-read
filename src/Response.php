@@ -8,7 +8,7 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead;
+namespace Ethereumico\EthRead;
 
 /**
  * An HTTP answer, reduced to the two things JSON-RPC needs.

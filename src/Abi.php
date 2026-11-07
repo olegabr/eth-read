@@ -8,10 +8,10 @@
 
 declare(strict_types=1);
 
-namespace Olegabr\EthRead;
+namespace Ethereumico\EthRead;
 
 use JsonException;
-use Olegabr\EthAbi\Problem;
+use Ethereumico\EthAbi\Problem;
 
 /**
  * A parsed ABI, with the lookups a block or a form actually performs.
